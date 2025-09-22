@@ -1,15 +1,15 @@
-import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
+import { Component, OnInit, inject } from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
-import { MatButtonModule } from '@angular/material/button';
-import { MatIconModule } from '@angular/material/icon';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatIconModule } from '@angular/material/icon';
+import { of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
+import { CodeReview, TeamMember } from '../../models';
 import { DevopsService } from '../../services/devops.service';
 import { NotificationService } from '../../services/notification.service';
-import { CodeReview, TeamMember } from '../../models';
-import { catchError } from 'rxjs/operators';
-import { of } from 'rxjs';
 
 @Component({
   selector: 'app-code-review',
@@ -242,34 +242,54 @@ export class CodeReviewComponent implements OnInit {
           return of([]);
         })
       )
-      .subscribe(members => {
-        this.teamMembers = members;
-      });
-  }
   
-  /**
-   * Obtiene el avatar de un miembro del equipo por su nombre
-   * @param name - Nombre del miembro del equipo
-   * @returns El avatar del miembro o un avatar por defecto si no se encuentra
-   */
-  getMemberAvatar(name: string): string {
-    const member = this.teamMembers.find(member => member.name === name);
-    return member?.avatar || '   '; // Espacio en blanco si no hay avatar
-  }
+// Caché para almacenar resultados de búsqueda de miembros
+private memberCache: Map<string, TeamMember | undefined> = new Map();
   
-  /**
-   * Obtiene el rol de un miembro del equipo por su nombre
-   * @param name - Nombre del miembro del equipo
-   * @returns El rol del miembro o una cadena vacía si no se encuentra
-   */
-  getMemberRole(name: string): string {
-    const member = this.teamMembers.find(member => member.name === name);
-    return member?.role || '';
-  }
+/**
+* Busca un miembro del equipo por su nombre (con caché)
+* @param name - Nombre del miembro del equipo
+* @returns El miembro encontrado o undefined si no existe
+* @private
+*/
+private findMember(name: string): TeamMember | undefined {
+// Verificar si ya tenemos este miembro en caché
+if (!this.memberCache.has(name)) {
+// Si no está en caché, buscarlo y guardarlo
+const member = this.teamMembers.find(member => member.name === name);
+this.memberCache.set(name, member);
+}
+return this.memberCache.get(name);
+}
+  
+/**
+* Obtiene el avatar de un miembro del equipo por su nombre
+* @param name - Nombre del miembro del equipo
+* @returns El avatar del miembro o un avatar por defecto si no se encuentra
+*/
+getMemberAvatar(name: string): string {
+const member = this.findMember(name);
+return member?.avatar || '   '; // Espacio en blanco si no hay avatar
+}
+  
+/**
+* Obtiene el rol de un miembro del equipo por su nombre
+* @param name - Nombre del miembro del equipo
+* @returns El rol del miembro o una cadena vacía si no se encuentra
+*/
+getMemberRole(name: string): string {
+const member = this.findMember(name);
+return member?.role || '';
+}
 
-  /**
-   * Formatea una fecha utilizando la configuración regional
-   * @param date - La fecha a formatear
+/**
+* Formatea una fecha utilizando la configuración regional
+* @param date - La fecha a formatear
+* @returns La fecha formateada como string
+*/
+formatDate(date: Date): string {
+return this.datePipe.transform(date, 'dd/MM/yyyy HH:mm', undefined, 'es-ES') || '';
+}
    * @returns La fecha formateada como string
    */
   formatDate(date: Date): string {
