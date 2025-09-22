@@ -1,5 +1,5 @@
-import { Component, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, OnInit, inject } from '@angular/core';
+import { CommonModule, DatePipe } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatButtonModule } from '@angular/material/button';
@@ -7,7 +7,9 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatDividerModule } from '@angular/material/divider';
 import { DevopsService } from '../../services/devops.service';
 import { NotificationService } from '../../services/notification.service';
-import { CodeReview } from '../../models';
+import { CodeReview, TeamMember } from '../../models';
+import { catchError } from 'rxjs/operators';
+import { of } from 'rxjs';
 
 @Component({
   selector: 'app-code-review',
@@ -20,6 +22,7 @@ import { CodeReview } from '../../models';
     MatIconModule,
     MatDividerModule,
   ],
+  providers: [DatePipe],
   template: `
     <div class="code-review-container">
       <h2>Revisiones de Código</h2>
@@ -27,7 +30,16 @@ import { CodeReview } from '../../models';
       <mat-card *ngFor="let review of codeReviews" class="review-card">
         <mat-card-header>
           <mat-card-title>{{ review.title }}</mat-card-title>
-          <mat-card-subtitle>Por: {{ review.author }}</mat-card-subtitle>
+          <mat-card-subtitle>
+            <div class="author-info">
+              <span class="avatar" [title]="getMemberRole(review.author)">{{ getMemberAvatar(review.author) }}</span>
+              <span>{{ review.author }}</span>
+              <span class="role-badge">{{ getMemberRole(review.author) }}</span>
+            </div>
+            <span *ngIf="review.reviewDate" class="review-date">
+              · <mat-icon class="date-icon">event</mat-icon> {{ formatDate(review.reviewDate) }}
+            </span>
+          </mat-card-subtitle>
         </mat-card-header>
         
         <mat-card-content>
@@ -46,7 +58,11 @@ import { CodeReview } from '../../models';
           <div class="comments-section" *ngIf="review.comments.length > 0">
             <h4>Comentarios:</h4>
             <div *ngFor="let comment of review.comments" class="comment">
-              <strong>{{ comment.author }}:</strong>
+              <div class="comment-header">
+                <span class="avatar" [title]="getMemberRole(comment.author)">{{ getMemberAvatar(comment.author) }}</span>
+                <strong>{{ comment.author }}:</strong>
+                <span class="role-badge small">{{ getMemberRole(comment.author) }}</span>
+              </div>
               <p>{{ comment.content }}</p>
               <small *ngIf="comment.file && comment.line">
                 {{ comment.file }}:{{ comment.line }}
@@ -108,6 +124,20 @@ import { CodeReview } from '../../models';
       color: #666;
     }
     
+    .review-date {
+      color: #666;
+      font-size: 0.9em;
+      display: inline-flex;
+      align-items: center;
+    }
+    
+    .date-icon {
+      font-size: 14px;
+      height: 14px;
+      width: 14px;
+      margin-right: 4px;
+    }
+    
     .status-pending {
       background-color: #ff9800 !important;
       color: white !important;
@@ -127,28 +157,132 @@ import { CodeReview } from '../../models';
       display: flex;
       gap: 8px;
     }
+    
+    .author-info {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    
+    .avatar {
+      font-size: 1.2em;
+      margin-right: 4px;
+      cursor: help;
+    }
+    
+    .role-badge {
+      background-color: #e0e0e0;
+      color: #333;
+      font-size: 0.8em;
+      padding: 2px 6px;
+      border-radius: 12px;
+      margin-left: 6px;
+    }
+    
+    .role-badge.small {
+      font-size: 0.7em;
+      padding: 1px 4px;
+    }
+    
+    .comment-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 4px;
+    }
   `]
 })
 export class CodeReviewComponent implements OnInit {
+  /** Lista de revisiones de código */
   codeReviews: CodeReview[] = [];
+  
+  /** Lista de miembros del equipo */
+  teamMembers: TeamMember[] = [];
+  
+  private devopsService = inject(DevopsService);
+  private notificationService = inject(NotificationService);
+  private datePipe = inject(DatePipe);
 
-  constructor(
-    private devopsService: DevopsService,
-    private notificationService: NotificationService
-  ) {}
-
+  /**
+   * Inicializa el componente cargando las revisiones de código y los miembros del equipo
+   */
   ngOnInit(): void {
     this.loadCodeReviews();
+    this.loadTeamMembers();
   }
 
+  /**
+   * Carga las revisiones de código desde el servicio
+   * @private
+   */
   private loadCodeReviews(): void {
-    this.devopsService.getCodeReviews().subscribe(reviews => {
-      this.codeReviews = reviews;
-    });
+    this.devopsService.getCodeReviews()
+      .pipe(
+        catchError(error => {
+          this.notificationService.showError('Error al cargar las revisiones de código');
+          console.error('Error loading code reviews:', error);
+          return of([]);
+        })
+      )
+      .subscribe(reviews => {
+        this.codeReviews = reviews;
+      });
+  }
+  
+  /**
+   * Carga los miembros del equipo desde el servicio
+   * @private
+   */
+  private loadTeamMembers(): void {
+    this.devopsService.getTeamMembers()
+      .pipe(
+        catchError(error => {
+          this.notificationService.showError('Error al cargar los miembros del equipo');
+          console.error('Error loading team members:', error);
+          return of([]);
+        })
+      )
+      .subscribe(members => {
+        this.teamMembers = members;
+      });
+  }
+  
+  /**
+   * Obtiene el avatar de un miembro del equipo por su nombre
+   * @param name - Nombre del miembro del equipo
+   * @returns El avatar del miembro o un avatar por defecto si no se encuentra
+   */
+  getMemberAvatar(name: string): string {
+    const member = this.teamMembers.find(member => member.name === name);
+    return member?.avatar || '   '; // Espacio en blanco si no hay avatar
+  }
+  
+  /**
+   * Obtiene el rol de un miembro del equipo por su nombre
+   * @param name - Nombre del miembro del equipo
+   * @returns El rol del miembro o una cadena vacía si no se encuentra
+   */
+  getMemberRole(name: string): string {
+    const member = this.teamMembers.find(member => member.name === name);
+    return member?.role || '';
   }
 
+  /**
+   * Formatea una fecha utilizando la configuración regional
+   * @param date - La fecha a formatear
+   * @returns La fecha formateada como string
+   */
+  formatDate(date: Date): string {
+    return this.datePipe.transform(date, 'dd/MM/yyyy HH:mm', undefined, 'es-ES') || '';
+  }
+
+  /**
+   * Obtiene la etiqueta de estado localizada
+   * @param status - El estado de la revisión
+   * @returns La etiqueta localizada
+   */
   getStatusLabel(status: string): string {
-    const labels: { [key: string]: string } = {
+    const labels: Record<string, string> = {
       pending: 'Pendiente',
       approved: 'Aprobado',
       rejected: 'Rechazado',
@@ -156,19 +290,50 @@ export class CodeReviewComponent implements OnInit {
     return labels[status] || status;
   }
 
+  /**
+   * Obtiene la clase CSS para el estado
+   * @param status - El estado de la revisión
+   * @returns La clase CSS correspondiente
+   */
   getStatusClass(status: string): string {
     return `status-${status}`;
   }
 
+  /**
+   * Aprueba una revisión de código y registra la fecha y hora de la acción
+   * @param reviewId - Identificador único de la revisión
+   */
   approveReview(reviewId: string): void {
-    this.devopsService.updateReviewStatus(reviewId, 'approved');
-    this.loadCodeReviews();
-    this.notificationService.showSuccess('Revisión aprobada correctamente');
+    // Find the review and update its date
+    const review = this.codeReviews.find(review => review.id === reviewId);
+    if (review) {
+      // Evitar cambiar la fecha si ya está en el estado solicitado
+      if (review.status !== 'approved') {
+        review.reviewDate = new Date();
+        
+        this.devopsService.updateReviewStatus(reviewId, 'approved', review.reviewDate);
+        this.loadCodeReviews();
+        this.notificationService.showSuccess('Revisión aprobada correctamente');
+      }
+    }
   }
 
+  /**
+   * Rechaza una revisión de código y registra la fecha y hora de la acción
+   * @param reviewId - Identificador único de la revisión
+   */
   rejectReview(reviewId: string): void {
-    this.devopsService.updateReviewStatus(reviewId, 'rejected');
-    this.loadCodeReviews();
-    this.notificationService.showError('Revisión rechazada');
+    // Find the review and update its date
+    const review = this.codeReviews.find(review => review.id === reviewId);
+    if (review) {
+      // Evitar cambiar la fecha si ya está en el estado solicitado
+      if (review.status !== 'rejected') {
+        review.reviewDate = new Date();
+        
+        this.devopsService.updateReviewStatus(reviewId, 'rejected', review.reviewDate);
+        this.loadCodeReviews();
+        this.notificationService.showError('Revisión rechazada');
+      }
+    }
   }
 }
