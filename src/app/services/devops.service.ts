@@ -85,32 +85,66 @@ export class DevopsService {
           content: 'Excelente optimización, mejora significativa en performance',
         },
       ],
+      reviewDate: new Date(Date.now() - 12 * 60 * 60 * 1000), // 12 horas atrás
     },
   ];
 
+  /**
+   * Obtiene la lista de commits
+   * @returns Observable con la lista de commits
+   */
   getCommits(): Observable<Commit[]> {
     return of(this.mockCommits);
   }
 
+  /**
+   * Obtiene la lista de miembros del equipo
+   * @returns Observable con la lista de miembros
+   */
   getTeamMembers(): Observable<TeamMember[]> {
     return of(this.mockTeamMembers);
   }
 
+  /**
+   * Obtiene la lista de revisiones de código
+   * @returns Observable con la lista de revisiones
+   */
   getCodeReviews(): Observable<CodeReview[]> {
     return of(this.mockCodeReviews);
   }
 
+  /**
+   * Añade un comentario a una revisión de código
+   * @param reviewId - Identificador de la revisión
+   * @param comment - Comentario a añadir
+   */
   addComment(reviewId: string, comment: Comment): void {
-    const review = this.mockCodeReviews.find(r => r.id === reviewId);
+    const review = this.mockCodeReviews.find(review => review.id === reviewId);
     if (review) {
       review.comments.push(comment);
     }
   }
 
-  updateReviewStatus(reviewId: string, status: 'pending' | 'approved' | 'rejected'): void {
-    const review = this.mockCodeReviews.find(r => r.id === reviewId);
+  /**
+   * Actualiza el estado de una revisión de código
+   * @param reviewId - Identificador de la revisión
+   * @param status - Nuevo estado de la revisión
+   * @param reviewDate - Fecha de la revisión (opcional)
+   */
+  updateReviewStatus(reviewId: string, status: 'pending' | 'approved' | 'rejected', reviewDate?: Date): void {
+    const review = this.mockCodeReviews.find(review => review.id === reviewId);
     if (review) {
-      review.status = status;
+      // Evitar cambiar el estado si ya está en el estado solicitado
+      if (review.status !== status) {
+        review.status = status;
+        
+        if (reviewDate) {
+          review.reviewDate = reviewDate;
+        } else if (status !== 'pending') {
+          // Si el estado cambia de pendiente a aprobado/rechazado y no se proporciona fecha, establecer la fecha actual
+          review.reviewDate = new Date();
+        }
+      }
     }
   }
 }

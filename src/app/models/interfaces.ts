@@ -19,6 +19,7 @@ export interface CodeReview {
   author: string;
   status: 'pending' | 'approved' | 'rejected';
   comments: Comment[];
+  reviewDate?: Date;
 }
 
 export interface Comment {
